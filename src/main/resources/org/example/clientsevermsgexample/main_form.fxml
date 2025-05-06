@@ -42,8 +42,8 @@
                 <content>
                     <AnchorPane minHeight="0.0" minWidth="0.0" prefHeight="180.0" prefWidth="200.0">
                         <children>
-                            <Button fx:id="user1_client" layoutX="100.0" mnemonicParsing="false"  text="User 1" />
-                            <Button fx:id="user2_server" layoutX="350.0" mnemonicParsing="false"  text="User 2" />
+                            <Button fx:id="user1_client" onAction="#user1_client" layoutX="100.0" mnemonicParsing="false"  text="User 1" />
+                            <Button fx:id="user2_server" onAction="#user2_server" layoutX="350.0" mnemonicParsing="false"  text="User 2" />
                         </children>
                     </AnchorPane>
                 </content>

@@ -1,7 +1,5 @@
 package org.example.clientsevermsgexample;
 
-
-
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -21,8 +19,6 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ResourceBundle;
 
-import static java.lang.Thread.sleep;
-
 public class MainController implements Initializable {
     @FXML
     private ComboBox dropdownPort;
@@ -35,15 +31,17 @@ public class MainController implements Initializable {
                 "23",     // telnet
                 "71",     // finger
                 "80",     // http
-                "119",     // nntp (news)
-                "161"      // snmp);
+                "119",    // nntp (news)
+                "161"     // snmp
         );
+
+        if (dropdownPort.getItems().size() > 0) {
+            dropdownPort.getSelectionModel().selectFirst();
+        }
     }
 
     @FXML
     private Button clearBtn;
-
-
 
     @FXML
     private TextArea resultArea;
@@ -60,46 +58,98 @@ public class MainController implements Initializable {
     @FXML
     private TextField urlName;
 
-    Socket socket1;
+    // Old implementation variables
+    private Socket socket1;
+    private Label lb122, lb12;
+    private TextField msgText;
 
-    Label lb122, lb12;
-    TextField msgText;
+    // Chat server variables
+    private ServerSocket oldServerSocket;
+    private boolean oldServerRunning = false;
+
+    @FXML
+    private void user1_client(ActionEvent event) {
+        try {
+            // Check if old server implementation is using the same port
+            if (oldServerRunning) {
+                alert("Warning", "Please stop the old server implementation first!");
+                return;
+            }
+
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("client-view.fxml"));
+            Parent root = loader.load();
+            Stage stage = new Stage();
+            stage.setTitle("User 1 (Client)");
+            stage.setScene(new Scene(root));
+            stage.show();
+        } catch (Exception e) {
+            e.printStackTrace();
+            alert("Error", "Could not open client: " + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void user2_server(ActionEvent event) {
+        try {
+            // Check if old server implementation is using the same port
+            if (oldServerRunning) {
+                alert("Warning", "Please stop the old server implementation first!");
+                return;
+            }
+
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("server-view.fxml"));
+            Parent root = loader.load();
+            Stage stage = new Stage();
+            stage.setTitle("User 2 (Server)");
+            stage.setScene(new Scene(root));
+            stage.show();
+        } catch (Exception e) {
+            e.printStackTrace();
+            alert("Error", "Could not open server: " + e.getMessage());
+        }
+    }
 
     @FXML
     void checkConnection(ActionEvent event) {
-
         String host = urlName.getText();
-        int port = Integer.parseInt(dropdownPort.getValue().toString());
-
-        try {
-            Socket sock = new Socket(host, port);
-            resultArea.appendText(host + " listening on port " + port + "\n");
-            sock.close();
-        } catch (UnknownHostException e) {
-            resultArea.setText(String.valueOf(e) + "\n");
+        if (host.isEmpty()) {
+            alert("Input Error", "Please enter a hostname.");
             return;
-        } catch (Exception e) {
-            resultArea.appendText(host + " not listening on port "
-                    + port + "\n");
         }
 
+        if (dropdownPort.getValue() == null) {
+            alert("Input Error", "Please select a port.");
+            return;
+        }
 
+        int port = Integer.parseInt(dropdownPort.getValue().toString());
+
+        try (Socket sock = new Socket(host, port)) {
+            resultArea.appendText(host + " listening on port " + port + "\n");
+        } catch (UnknownHostException e) {
+            resultArea.setText("Error: " + e.getMessage() + "\n");
+        } catch (Exception e) {
+            resultArea.appendText(host + " not listening on port " + port + "\n");
+        }
     }
-
 
     @FXML
     void clearBtn(ActionEvent event) {
         resultArea.setText("");
         urlName.setText("");
-
     }
 
-
-
+    // Old server implementation - using port 7777 to avoid conflict with the chat
     @FXML
     void startServer(ActionEvent event) {
+        if (oldServerRunning) {
+            alert("Warning", "Server is already running!");
+            return;
+        }
+
         Stage stage = new Stage();
         Group root = new Group();
+
         Label lb11 = new Label("Server");
         lb11.setLayoutX(100);
         lb11.setLayoutY(100);
@@ -107,40 +157,48 @@ public class MainController implements Initializable {
         lb12 = new Label("info");
         lb12.setLayoutX(100);
         lb12.setLayoutY(200);
-        root.getChildren().addAll(lb11, lb12);
+
+        Button stopButton = new Button("Stop Server");
+        stopButton.setLayoutX(100);
+        stopButton.setLayoutY(250);
+        stopButton.setOnAction(e -> stopOldServer());
+
+        root.getChildren().addAll(lb11, lb12, stopButton);
         Scene scene = new Scene(root, 600, 350);
         stage.setScene(scene);
-        lb12.setText("Server is running and waiting for a client...");
-
-        stage.setTitle("Server");
+        stage.setTitle("Old Server Implementation");
         stage.show();
 
-
-        new Thread(this::runServer).start();
-
+        // Start on port 7777 to avoid conflict with the chat
+        new Thread(() -> runServer(7777)).start();
     }
 
-    String message;
-
-    private void runServer() {
+    private void stopOldServer() {
+        oldServerRunning = false;
         try {
+            if (oldServerSocket != null && !oldServerSocket.isClosed()) {
+                oldServerSocket.close();
+            }
+            updateServer("Server stopped.");
+        } catch (IOException e) {
+            updateServer("Error stopping server: " + e.getMessage());
+        }
+    }
 
-            ServerSocket serverSocket = new ServerSocket(6666);
-            updateServer("Server is running and waiting for a client...");
-            while (true) { // Infinite loop
-                try {
-                    Socket clientSocket = serverSocket.accept();
+    private String message;
+
+    private void runServer(int port) {
+        try {
+            oldServerRunning = true;
+            oldServerSocket = new ServerSocket(port);
+            updateServer("Server is running on port " + port + " and waiting for a client...");
+
+            while (oldServerRunning) {
+                try (Socket clientSocket = oldServerSocket.accept();
+                     DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
+                     DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())) {
+
                     updateServer("Client connected!");
-
-                    new Thread(() -> {
-                        try {
-                            sleep(3000);
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    });
-                    DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
-                    DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream());
 
                     message = dis.readUTF();
                     updateServer("Message from client: " + message);
@@ -148,41 +206,43 @@ public class MainController implements Initializable {
                     // Sending a response back to the client
                     dos.writeUTF("Received: " + message);
 
-                    dis.close();
-                    dos.close();
+                    if (message.equalsIgnoreCase("exit")) break;
 
                 } catch (IOException e) {
-                    updateServer("Error: " + e.getMessage());
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    if (oldServerRunning) {
+                        updateServer("Error: " + e.getMessage());
+                    }
                 }
-                if (message.equalsIgnoreCase("exit")) break;
-
             }
         } catch (IOException e) {
-            updateServer("Error: " + e.getMessage());
+            updateServer("Server error: " + e.getMessage());
+        } finally {
+            oldServerRunning = false;
         }
     }
 
     private void updateServer(String message) {
-        // Run on the UI thread
-        javafx.application.Platform.runLater(() -> lb12.setText(message + "\n"));
+        javafx.application.Platform.runLater(() -> {
+            if (lb12 != null) {
+                lb12.setText(message);
+            }
+        });
     }
-
 
     @FXML
     void startClient(ActionEvent event) {
         Stage stage = new Stage();
         Group root = new Group();
+
         Button connectButton = new Button("Connect to server");
         connectButton.setLayoutX(100);
         connectButton.setLayoutY(300);
         connectButton.setOnAction(this::connectToServer);
-        // new Thread(this::connectToServer).start();
 
         Label lb11 = new Label("Client");
         lb11.setLayoutX(100);
         lb11.setLayoutY(100);
+
         msgText = new TextField("msg");
         msgText.setLayoutX(100);
         msgText.setLayoutY(150);
@@ -190,44 +250,44 @@ public class MainController implements Initializable {
         lb122 = new Label("info");
         lb122.setLayoutX(100);
         lb122.setLayoutY(200);
-        root.getChildren().addAll(lb11, lb122, connectButton, msgText);
 
+        root.getChildren().addAll(lb11, lb122, connectButton, msgText);
 
         Scene scene = new Scene(root, 600, 350);
         stage.setScene(scene);
-        stage.setTitle("Client");
+        stage.setTitle("Old Client Implementation");
         stage.show();
-
-
     }
 
-
     private void connectToServer(ActionEvent event) {
+        try (Socket socket = new Socket("localhost", 7777);  // Connect to the old server port
+             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+             DataInputStream dis = new DataInputStream(socket.getInputStream())) {
 
-
-        try {
-            socket1 = new Socket("localhost", 6666);
-
-            DataOutputStream dos = new DataOutputStream(socket1.getOutputStream());
-            DataInputStream dis = new DataInputStream(socket1.getInputStream());
-
+            updateTextClient("Connected to server");
             dos.writeUTF(msgText.getText());
+
             String response = dis.readUTF();
-            updateTextClient("Server response: " + response + "\n");
+            updateTextClient("Server response: " + response);
 
-            dis.close();
-            dos.close();
-            socket1.close();
         } catch (Exception e) {
-            updateTextClient("Error: " + e.getMessage() + "\n");
+            updateTextClient("Error: " + e.getMessage());
         }
-
-
     }
 
     private void updateTextClient(String message) {
-        // Run on the UI thread
-        javafx.application.Platform.runLater(() -> lb122.setText(message + "\n"));
+        javafx.application.Platform.runLater(() -> {
+            if (lb122 != null) {
+                lb122.setText(message);
+            }
+        });
     }
 
+    private void alert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
 }
